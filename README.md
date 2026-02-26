@@ -1,42 +1,35 @@
-# Turborepo starter with shell commands
+# `turbo prune --docker` generates broken pnpm lockfile
 
-This Turborepo starter is maintained by the Turborepo core team. This template is great for issue reproductions and exploring building task graphs without frameworks.
+Minimal reproduction for a `turbo prune` bug where the pruned `pnpm-lock.yaml` is internally inconsistent, causing `pnpm install --frozen-lockfile` to fail.
 
-## Using this example
+## Bug
 
-Run the following command:
+When a workspace package has a module listed as both a `devDependency` and a `peerDependency`, and the pruned app depends on that workspace package but does **not** directly depend on the module, `turbo prune --docker` keeps the importer entry referencing the module but omits the package resolution from the pruned lockfile.
 
-```sh
-npx create-turbo@latest -e with-shell-commands
+```
+ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY  Broken lockfile: no entry for 'uuid@11.1.0' in pnpm-lock.yaml
 ```
 
-### For bug reproductions
+## Setup
 
-Giving the Turborepo core team a minimal reproduction is the best way to create a tight feedback loop for a bug you'd like to report.
+- `packages/pkg-a` — has `uuid` as a `devDependency` and a `peerDependency`
+- `apps/app-a` — depends on `pkg-a` (does **not** depend on `uuid`)
+- `apps/app-b` — depends on `pkg-a` **and** `uuid` directly
 
-Because most monorepos will rely on more tooling than Turborepo (frameworks, linters, formatters, etc.), it's often useful for us to have a reproduction that strips away all of this other tooling so we can focus _only_ on Turborepo's role in your repo. This example does exactly that, giving you a good starting point for creating a reproduction.
+Pruning for `app-a` includes `pkg-a` in the pruned output. The pruned lockfile retains `pkg-a`'s importer section (which references `uuid@11.1.0` as a devDependency) but drops the `uuid@11.1.0` package resolution and snapshot entries.
 
-- Feel free to rename/delete packages for your reproduction so that you can be confident it most closely matches your use case.
-- If you need to use a different package manager to produce your bug, run `npx @turbo/workspaces convert` to switch package managers.
-- It's possible that your bug really **does** have to do with the interaction of Turborepo and other tooling within your repository. If you find that your bug does not reproduce in this minimal example and you're confident Turborepo is still at fault, feel free to bring that other tooling into your reproduction.
+## Reproduce
 
-## What's inside?
+```bash
+pnpm install
+npx turbo prune app-a --docker
+cd out/json
+pnpm install --frozen-lockfile
+```
 
-This Turborepo includes the following packages:
+Expected: install succeeds.
+Actual: `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
 
-### Apps and Packages
+## Workaround
 
-- `app-a`: A final package that depends on all other packages in the graph and has no dependents. This could resemble an application in your monorepo that consumes everything in your monorepo through its topological tree.
-- `app-b`: Another final package with many dependencies. No dependents, lots of dependencies.
-- `pkg-a`: A package that has all scripts in the root `package.json`.
-- `pkg-b`: A package with _almost_ all scripts in the root `package.json`.
-- `tooling-config`: A package to simulate a common configuration used for all of your repository. This could resemble a configuration for tools like TypeScript or ESLint that are installed into all of your packages.
-
-### Some scripts to try
-
-If you haven't yet, [install global `turbo`](https://turborepo.dev/docs/installing#install-globally) to run tasks.
-
-- `turbo build lint check-types`: Runs all tasks in the default graph.
-- `turbo build`: A basic command to build `app-a` and `app-b` in parallel.
-- `turbo build --filter=app-a`: Building only `app-a` and its dependencies.
-- `turbo lint`: A basic command for running lints in all packages in parallel.
+Add `uuid` (the missing dependency) to `app-a`'s `devDependencies` so that turbo prune includes the package resolution in the pruned lockfile.

@@ -1,11 +1,12 @@
 {
   "name": "pkg-a",
   "scripts": {
-    "build": "echo \"Building at the speed of Turbo.\" > output-file.txt && cat output-file.txt",
-    "lint": "echo \"Linted!\"",
-    "check-types": "echo \"Types checked!\""
+    "build": "echo \"Building at the speed of Turbo.\" > output-file.txt && cat output-file.txt"
   },
-  "dependencies": {
-    "tooling-config": "workspace:*"
+  "devDependencies": {
+    "uuid": "^11.0.0"
+  },
+  "peerDependencies": {
+    "uuid": "*"
   }
 }
